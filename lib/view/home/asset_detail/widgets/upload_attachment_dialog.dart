@@ -21,6 +21,7 @@ Future<void> showUploadAttachmentDialog(
   String? assetNo,
 ) async {
   TextEditingController nameController = TextEditingController();
+  final GlobalKey<FormState> formKey = GlobalKey<FormState>();
 
   Future<File?> compressImage(File file, BuildContext callbackContext) async {
     try {
@@ -268,29 +269,39 @@ Future<void> showUploadAttachmentDialog(
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Upload Attachment',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(
-                labelText: 'Enter file name (optional for multiple)',
-                border: OutlineInputBorder(),
+        child: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Upload Attachment',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
-            ),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Enter file name (optional for multiple)',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Please enter a file name';
+                  }
+                  return null;
+                },
+              ),
             const SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 ElevatedButton.icon(
                   onPressed: () async {
-                    Navigator.pop(context);
-                    await takePicture();
+                    if (formKey.currentState!.validate()) {
+                      Navigator.pop(context);
+                      await takePicture();
+                    }
                   },
                   icon: const Icon(Icons.camera_alt, color: Colors.black),
                   label: const Text(
@@ -300,8 +311,10 @@ Future<void> showUploadAttachmentDialog(
                 ),
                 ElevatedButton.icon(
                   onPressed: () async {
-                    Navigator.pop(context);
-                    await pickSingleFile();
+                    if (formKey.currentState!.validate()) {
+                      Navigator.pop(context);
+                      await pickSingleFile();
+                    }
                   },
                   icon: const Icon(Icons.file_upload, color: Colors.black),
                   label: const Text(
@@ -329,7 +342,7 @@ Future<void> showUploadAttachmentDialog(
           ],
         ),
       ),
-    ),
+    ),)
   );
 }
 
@@ -342,9 +355,10 @@ Future<void> _uploadFile(
   String fileName,
   bool isImage,
 ) async {
-  if (fileName.isEmpty) {
-    ToastCustom.errorToast(context, 'Please enter a file name');
-    return;
+  // If fileName is empty, use a default timestamp-based name
+  String finalFileName = fileName.trim();
+  if (finalFileName.isEmpty) {
+    finalFileName = "Attachment_${DateTime.now().millisecondsSinceEpoch}";
   }
 
   await controller.uploadImageApi(
