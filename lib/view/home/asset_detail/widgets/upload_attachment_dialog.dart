@@ -9,6 +9,10 @@ import 'package:sewa/global/app_colors.dart';
 import 'package:sewa/helpers/toasts.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sewa/view/home/asset_detail/widgets/image_annotation_screen.dart';
+import 'dart:typed_data';
+import 'dart:math';
+import 'package:camera/camera.dart';
+import 'package:sewa/view/home/asset_detail/widgets/smart_camera_page.dart';
 
 Future<void> showUploadAttachmentDialog(
   BuildContext context,
@@ -59,15 +63,17 @@ Future<void> showUploadAttachmentDialog(
   }
 
   Future<void> takePicture() async {
-    final ImagePicker picker = ImagePicker();
-    final XFile? image = await picker.pickImage(source: ImageSource.camera);
+    final XFile? image = await Navigator.push<XFile>(
+      context,
+      MaterialPageRoute(builder: (context) => const SmartCameraPage()),
+    );
 
     if (image != null) {
       CroppedFile? croppedFile = await ImageCropper().cropImage(
         sourcePath: image.path,
         uiSettings: [
           AndroidUiSettings(
-            toolbarTitle: 'Crop Images', 
+            toolbarTitle: 'Crop Images',
             toolbarColor: AppColors.blueShadeGradiant,
             toolbarWidgetColor: Colors.white,
             initAspectRatio: CropAspectRatioPreset.original,
