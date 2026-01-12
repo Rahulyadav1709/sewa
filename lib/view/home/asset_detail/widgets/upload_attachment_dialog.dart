@@ -24,6 +24,9 @@ Future<void> showUploadAttachmentDialog(
 
   Future<File?> compressImage(File file, BuildContext callbackContext) async {
     try {
+      final int originalSize = await file.length();
+      debugPrint("📸 Original Image Size: ${(originalSize / 1024).toStringAsFixed(2)} KB");
+
       final tempDir = await getTemporaryDirectory();
       final String targetPath =
           '${tempDir.path}/${DateTime.now().millisecondsSinceEpoch}_compressed.jpg';
@@ -38,6 +41,8 @@ Future<void> showUploadAttachmentDialog(
 
       if (compressedFile != null) {
         final File compressed = File(compressedFile.path);
+        final int compressedSize = await compressed.length();
+        debugPrint("📉 Compressed Image Size: ${(compressedSize / 1024).toStringAsFixed(2)} KB");
         return compressed;
       } else {
         ToastCustom.errorToast(callbackContext, 'Failed to compress image');

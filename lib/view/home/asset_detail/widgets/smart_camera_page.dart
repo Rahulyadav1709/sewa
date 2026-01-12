@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:path_provider/path_provider.dart';
 
 class SmartCameraPage extends StatefulWidget {
   const SmartCameraPage({super.key});
@@ -144,11 +146,13 @@ class _SmartCameraPageState extends State<SmartCameraPage> {
     try {
       // Stop image stream before taking picture to avoid conflict
       await _controller!.stopImageStream();
-      final XFile file = await _controller!.takePicture();
+      final XFile pickedFile = await _controller!.takePicture();
+      
       if (mounted) {
-        Navigator.pop(context, file);
+        Navigator.pop(context, pickedFile);
       }
     } catch (e) {
+      debugPrint("Error capturing image: $e");
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Error capturing image: $e")),
       );
