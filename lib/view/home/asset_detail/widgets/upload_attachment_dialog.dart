@@ -281,13 +281,30 @@ Future<void> showUploadAttachmentDialog(
               const SizedBox(height: 10),
               TextFormField(
                 controller: nameController,
+                autovalidateMode: AutovalidateMode.onUserInteraction,
                 decoration: const InputDecoration(
                   labelText: 'Enter file name (optional for multiple)',
                   border: OutlineInputBorder(),
                 ),
                 validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
+                  if (value == null || value.isEmpty) {
                     return 'Please enter a file name';
+                  }
+                  if (value.startsWith(' ')) {
+                    return 'Space not allowed at start';
+                  }
+                  if (value.endsWith(' ')) {
+                    return 'Space not allowed at end';
+                  }
+                  if (value.length < 3) {
+                    return 'At least 3 characters required';
+                  }
+                  final validCharacters = RegExp(r'^[a-zA-Z0-9 \-/.]+$');
+                  if (!validCharacters.hasMatch(value)) {
+                    return 'Only alphabets, numbers, spaces, and date separators (-, /, .) are allowed';
+                  }
+                  if (RegExp(r'^\d+$').hasMatch(value)) {
+                    return 'File name cannot be only digits';
                   }
                   return null;
                 },
