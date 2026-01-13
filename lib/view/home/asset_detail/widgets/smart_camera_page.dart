@@ -132,20 +132,33 @@ class _SmartCameraPageState extends State<SmartCameraPage> {
     super.dispose();
   }
 
+  bool _isCapturing = false;
   Future<void> captureImage() async {
-    if (!canCapture || _controller == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Cannot capture - Image quality not good enough"),
-          backgroundColor: Colors.red,
-        ),
-      );
+    if (_isCapturing || !canCapture || _controller == null) {
+      if (!canCapture && !_isCapturing) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Cannot capture - Image quality not good enough"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
       return;
     }
 
+    setState(() {
+      _isCapturing = true;
+    });
+
     try {
       // Stop image stream before taking picture to avoid conflict
-      await _controller!.stopImageStream();
+      try {
+        await _controller!.stopImageStream();
+      } catch (e) {
+        // Ignore if stream already stopped
+        debugPrint("Stream already stopped or failed to stop: $e");
+      }
+      
       final XFile pickedFile = await _controller!.takePicture();
       
       if (mounted) {
@@ -153,11 +166,22 @@ class _SmartCameraPageState extends State<SmartCameraPage> {
       }
     } catch (e) {
       debugPrint("Error capturing image: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error capturing image: $e")),
-      );
-      // Restart stream if it failed
-      _controller?.startImageStream(analyzeFrame);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error capturing image: $e")),
+        );
+        
+        setState(() {
+          _isCapturing = false;
+        });
+
+        // Restart stream if it failed
+        try {
+          await _controller?.startImageStream(analyzeFrame);
+        } catch (re) {
+          debugPrint("Failed to restart stream: $re");
+        }
+      }
     }
   }
 
