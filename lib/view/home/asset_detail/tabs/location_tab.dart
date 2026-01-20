@@ -8,8 +8,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:sewa/controller/client_mgr_home_controller.dart';
 import 'package:sewa/global/app_styles.dart';
+import 'package:sewa/global/app_colors.dart';
 
 import 'dart:ui' as ui;
 import 'package:url_launcher/url_launcher.dart';
@@ -45,7 +47,7 @@ class LocationTab extends StatefulWidget {
 }
 
 class _LocationTabState extends State<LocationTab>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   BitmapDescriptor? normalMarker;
   BitmapDescriptor? shiningMarker;
   bool isShining = false;
@@ -74,10 +76,22 @@ class _LocationTabState extends State<LocationTab>
   @override
   void initState() {
     super.initState();
-    homeController.getLocation();
+    WidgetsBinding.instance.addObserver(this);
+    // Only check permission status on init, don't automatically request
+    homeController.getLocation(requestIfNeeded: false);
     _setCustomMarkers();
     _initAnimations();
     _createManualMarker();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      // Re-check permission status when app resumes (returning from settings or background)
+      // Do NOT auto-request here to avoid loops
+      homeController.getLocation(requestIfNeeded: false);
+    }
   }
 
   void _initAnimations() {
@@ -113,6 +127,7 @@ class _LocationTabState extends State<LocationTab>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     _fabAnimationController.dispose();
     _pulseAnimationController.dispose();
@@ -470,7 +485,15 @@ class _LocationTabState extends State<LocationTab>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Stack(
+      body: Obx(() {
+        // Check if location permission is denied or permanently denied
+        if (homeController.locationPermission.value == LocationPermission.denied ||
+            homeController.locationPermission.value == LocationPermission.deniedForever) {
+          return _buildPermissionDeniedView();
+        }
+        
+        // Show the map if permission is granted
+        return Stack(
         children: [
           // Google Map
           Obx(
@@ -917,6 +940,128 @@ class _LocationTabState extends State<LocationTab>
               ),
             ),
           ),
+        ],
+      );
+      }),
+    );
+  }
+
+  Widget _buildPermissionDeniedView() {
+    bool isPermanentlyDenied = homeController.locationPermission.value == LocationPermission.deniedForever;
+    
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 30),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.red.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.location_off_rounded,
+              size: 80,
+              color: Colors.redAccent,
+            ),
+          ),
+          const SizedBox(height: 32),
+          const Text(
+            'Location Access Required',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            isPermanentlyDenied
+                ? 'Location permissions are permanently denied. Please enable them in your app settings to view the map and update assets.'
+                : 'To view the asset location and update it, we need your location permission. This helps in precisely tagging assets on the field.',
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.grey[600],
+              height: 1.5,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 48),
+          Obx(() => Column(
+            children: [
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton(
+                  onPressed: homeController.isLocationLoading.value 
+                    ? null 
+                    : () async {
+                      // Re-check actual status directly from controller to be safe
+                      final currentPermission = await Geolocator.requestPermission();
+                      final isForever = currentPermission == LocationPermission.deniedForever;
+                      
+                      print("🔘 Button pressed! Status: $currentPermission, isForever: $isForever");
+                      
+                      if (isForever) {
+                        print("📱 Opening settings...");
+                        await homeController.openSettings(context: context);
+                      } else {
+                        print("🔓 Requesting permission...");
+                        await homeController.getLocation(requestIfNeeded: true);
+                      }
+                      print("✅ Button action completed");
+                    },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: homeController.isLocationLoading.value
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : Text(
+                        homeController.locationPermission.value == LocationPermission.deniedForever 
+                          ? 'Open App Settings' 
+                          : 'Grant Permission',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: homeController.isLocationLoading.value 
+                  ? null 
+                  : () async => await homeController.getLocation(requestIfNeeded: true),
+                child: Text(
+                  homeController.locationPermission.value == LocationPermission.deniedForever 
+                    ? 'Already enabled? Click here to refresh' 
+                    : 'Try Again',
+                  style: TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          )),
         ],
       ),
     );

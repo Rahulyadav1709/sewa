@@ -46,50 +46,87 @@ class ClientMgrHomeController extends GetxController
 
   GoogleMapController? mapController;
 
+  Rx<LocationPermission> locationPermission = LocationPermission.denied.obs;
+
+  // Flag to prevent concurrent location requests
+  RxBool isLocationLoading = false.obs;
+
   // Method to get the user's current location
-  Future<void> getLocation() async {
+  Future<void> getLocation({bool requestIfNeeded = true}) async {
+    // Prevent concurrent calls
+    if (isLocationLoading.value) return;
+
     bool serviceEnabled;
     LocationPermission permission;
 
-    // Check if location services are enabled
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      // Location services are not enabled, handle it accordingly
-      Get.snackbar('Error', 'Location services are disabled.');
-      return;
-    }
+    try {
+      isLocationLoading.value = true;
 
-    // Check location permissions
-    permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        // Permissions are denied, handle accordingly
-        Get.snackbar('Error', 'Location permissions are denied');
+      // Check if location services are enabled
+      serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        // Location services are not enabled
+        isLocationLoading.value = false;
         return;
       }
-    }
 
-    if (permission == LocationPermission.deniedForever) {
-      // Permissions are denied forever, handle accordingly
-      Get.snackbar('Error', 'Location permissions are permanently denied');
-      return;
-    }
+      // Check current permission status
+      permission = await Geolocator.checkPermission();
+      print("Current permission status: $permission");
+      
+      // Request permission only if requested and status is denied
+      if (requestIfNeeded && permission == LocationPermission.denied) {
+        print("Requesting location permission...");
+        permission = await Geolocator.requestPermission();
+        print("Permission after request: $permission");
+      }
 
-    // Fetch the current position
-    Position position = await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
-    );
+      // Update the reactive variable once at the end of decision logic
+      locationPermission.value = permission;
 
-    // Update latitude and longitude
-    latitude.value = position.latitude;
-    longitude.value = position.longitude;
+      // If permissions are denied, stop here
+      if (permission == LocationPermission.denied || 
+          permission == LocationPermission.deniedForever) {
+        print("Permission denied or permanently denied: $permission");
+        isLocationLoading.value = false;
+        return;
+      }
 
-    // Update map if controller is available
-    if (mapController != null) {
-      mapController!.animateCamera(
-        CameraUpdate.newLatLng(LatLng(latitude.value, longitude.value)),
+      // Fetch the current position if permission is granted
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 10),
       );
+
+      // Update latitude and longitude
+      latitude.value = position.latitude;
+      longitude.value = position.longitude;
+
+      // Update map if controller is available
+      if (mapController != null) {
+        mapController!.animateCamera(
+          CameraUpdate.newLatLng(LatLng(latitude.value, longitude.value)),
+        );
+      }
+    } catch (e) {
+      print("Error in getLocation: $e");
+    } finally {
+      isLocationLoading.value = false;
+    }
+  }
+
+  Future<void> openSettings({BuildContext? context}) async {
+    try {
+      bool opened = await Geolocator.openAppSettings();
+      print("📱 Settings opened: $opened");
+      if (!opened && context != null) {
+        ToastCustom.errorToast(context, "Could not open settings automatically. Please open them manually via your device settings.");
+      }
+    } catch (e) {
+      print("❌ Error opening settings: $e");
+      if (context != null) {
+        ToastCustom.errorToast(context, "Error: $e");
+      }
     }
   }
 
